@@ -7,7 +7,7 @@ import {
   HTTP_INTERCEPTORS,
 } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { tap, Observable, throwError } from 'rxjs';
+import { Observable, throwError, catchError } from 'rxjs';
 
 @Injectable()
 export class ErrorInterceptor implements HttpInterceptor {
@@ -16,35 +16,35 @@ export class ErrorInterceptor implements HttpInterceptor {
     next: HttpHandler
   ): Observable<HttpEvent<any>> {
     return next.handle(req).pipe(
-      tap({
-        error: (err: HttpErrorResponse) => {
-          console.log(
-            'the interceptor has caught an error, process it here',
-            err
-          );
-          if (err.status === 401) return throwError(() => err.statusText);
-          if (err instanceof HttpErrorResponse) {
-            const applicationError = err.headers.get('Application-Error');
-            if (applicationError) return throwError(() => applicationError);
+      catchError((error: HttpErrorResponse) => {
+        if (error.status === 401) return throwError(() => error.statusText);
 
-            const serverError = err.error;
+        if (error instanceof HttpErrorResponse) {
+          const applicationError = error.headers.get('Application-Error');
+          if (applicationError) return throwError(() => applicationError);
+        }
 
-            let modelStateErrors = '';
-            if (serverError.errors && typeof serverError.errors === 'object') {
-              for (const key in serverError.errors) {
-                if (serverError.errors[key]) {
-                  modelStateErrors += serverError.errors[key] + '\n';
-                }
-              }
+        const serverError = error.error;
+        console.log(serverError);
+        let modelStateErrors = '';
+        if (serverError.errors && typeof serverError.errors === 'object') {
+          for (const key in serverError.errors) {
+            if (serverError.errors[key]) {
+              modelStateErrors += serverError.errors[key] + '\n';
             }
-            //for example : modelStateError accommodates for password and username error
-            //another example serverError accommodates for User already exists server error response.
-            return throwError(() => modelStateErrors || serverError);
           }
-          // if you reach here then we don't know what type of error it is
-          // in this case we add some text 'Server Error'
-          return throwError(() => 'Server Error');
-        },
+
+          //for example : modelStateError accommodates for password and username error which mean multiple field error
+          return throwError(() => modelStateErrors);
+        }
+
+        //another example serverError accommodates for User already exists server error response.
+        if (typeof serverError === 'string')
+          return throwError(() => serverError);
+
+        // if you reach here then we don't know what type of error it is
+        // in this case we add some text 'Server Error'
+        return throwError(() => 'Server Error');
       })
     );
   }
